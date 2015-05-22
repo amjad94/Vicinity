@@ -1,7 +1,6 @@
 package vicinity.ConnectionManager;
 
 import android.app.Service;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.os.IBinder;
 import android.content.Context;
@@ -17,7 +16,6 @@ import android.content.BroadcastReceiver;
 import android.util.Log;
 import android.net.wifi.p2p.WifiP2pManager.Channel;
 
-import com.esotericsoftware.kryonet.Server;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -30,7 +28,6 @@ import vicinity.Controller.MainController;
 import vicinity.model.DBHandler;
 import vicinity.model.Globals;
 import vicinity.model.Neighbor;
-import vicinity.vicinity.ChatActivity;
 import vicinity.vicinity.FriendListAdapter;
 import vicinity.vicinity.NeighborListAdapter;
 import vicinity.vicinity.NeighborSectionFragment;
@@ -57,6 +54,7 @@ public class ConnectAndDiscoverService extends Service
     public static FriendListAdapter friendListAdapter;
     private MainController controller;
     private static InetAddress GOIP;
+    private DBHandler db;
 
 
 
@@ -76,6 +74,9 @@ public class ConnectAndDiscoverService extends Service
 
         ctx= ConnectAndDiscoverService.this;
         controller = new MainController(ctx);
+        db = new DBHandler(this);
+
+
 
         //Initializing WiFiP2pManager
         manager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
@@ -94,7 +95,6 @@ public class ConnectAndDiscoverService extends Service
             e.printStackTrace();
         }
         startRegistrationAndDiscovery();
-
     }
 
     @Override
@@ -108,9 +108,9 @@ public class ConnectAndDiscoverService extends Service
 
         //TODO delete those lines later
         disconnectPeers();
-        //.deleteDatabase();
+        db.deleteDatabase();
 
-        /*Remove advertised service request
+        //Remove advertised service request
         if (serviceRequest != null)
             manager.removeServiceRequest(channel, serviceRequest,
                     new WifiP2pManager.ActionListener() {
@@ -122,7 +122,7 @@ public class ConnectAndDiscoverService extends Service
                         @Override
                         public void onFailure(int arg0) {
                         }
-                    });*/
+                    });
 
     }
 
@@ -248,26 +248,12 @@ public class ConnectAndDiscoverService extends Service
         config.wps.setup = WpsInfo.PBC;//Wifi permission Push Button
 
 
-        /*//I've deleted this cause it stops service discovery after connection
-        and we do not want that
-        if (serviceRequest != null)
-            manager.removeServiceRequest(channel, serviceRequest,
-                    new WifiP2pManager.ActionListener() {
-
-                        @Override
-                        public void onSuccess() {
-                        }
-
-                        @Override
-                        public void onFailure(int arg0) {
-                        }
-                    });*/
 
             manager.connect(channel, config, new WifiP2pManager.ActionListener() {
 
             @Override
             public void onSuccess() {
-                Log.i(TAG,"Connected to "+ name);
+                Log.i(TAG, "Connected to " + name);
 
             }
 
@@ -303,23 +289,17 @@ public class ConnectAndDiscoverService extends Service
         Log.i(TAG, "onConnectionAvailable");
         Thread handler = null;
 
-
-         /*
-         * The group owner accepts connections using a server socket and then spawns a
-         * client socket for every client. This is handled by {@code
-         * GroupOwnerSocketHandler}
-         */
-        //TODO a condition for neighbor and friend
         GOIP = p2pInfo.groupOwnerAddress;
         try {
         if (p2pInfo.isGroupOwner) {
             Log.i(TAG, "Connected as group owner");
 
-                handler = new GroupOwnerSocketHandler(
-                       ChatActivity.handler);
+                handler = new GroupOwnerSocketHandler();
                 handler.start();
                 Thread requestServer = new RequestServer();
                 requestServer.start();
+            ChatServer chatSocket = new ChatServer();
+            new Thread(chatSocket).start();
 
         }
 
@@ -327,12 +307,12 @@ public class ConnectAndDiscoverService extends Service
             Log.d(TAG, "Connected as peer");
 
             Thread.sleep(1000);
-            handler = new ClientSocketHandler(
-                    ChatActivity.handler,
-                    p2pInfo.groupOwnerAddress);
+            handler = new ClientSocketHandler(p2pInfo.groupOwnerAddress);
             handler.start();
             Thread requestServer = new RequestServer();
             requestServer.start();
+            ChatServer chatSocket = new ChatServer();
+            new Thread(chatSocket).start();
         }
         }catch (IOException e) {
             Log.d(TAG,"Failed to create a server thread - " + e.getMessage());
@@ -342,29 +322,10 @@ public class ConnectAndDiscoverService extends Service
             e.printStackTrace();
         }
 
-        //Starting a new chat activity with a connected peer.
-        startChatting();
 
     }
 
-    ///IGNORE THIS RUBBISH
-    @Override
-    public void chatWithFriend(Neighbor friend){
-        startChatting();
-    }
 
-
-    public void startChatting(){
-        Intent intent = new Intent();
-        intent.putExtra("MSG_ID", 5);
-        intent.setAction(Intent.ACTION_MAIN);
-        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        ComponentName cn = new ComponentName(this, ChatActivity.class);
-        intent.setComponent(cn);
-        startActivity(intent);
-
-    }
 
     /**
      * Get Group Owner's IP address of the current network
@@ -396,17 +357,9 @@ public class ConnectAndDiscoverService extends Service
                     //Code to be done while name change Fails
                 }
             });}
-        catch(IllegalAccessException e){
+        catch(IllegalAccessException | InvocationTargetException | NoSuchMethodException e){
             e.printStackTrace();
         }
-        catch(InvocationTargetException e){
-            e.printStackTrace();
-
-        }
-        catch (NoSuchMethodException e){
-            e.printStackTrace();
-        }
-
 
 
     }
@@ -493,7 +446,6 @@ public class ConnectAndDiscoverService extends Service
     static public void setFAdapter(FriendListAdapter fAdapter){
         friendListAdapter = fAdapter;
     }
-
 
 
 

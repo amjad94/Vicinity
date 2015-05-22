@@ -1,8 +1,7 @@
 
 package vicinity.ConnectionManager;
 
-import android.os.Handler;
-import android.util.Log;
+
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -12,43 +11,22 @@ import java.net.Socket;
 
 import vicinity.model.Globals;
 
-
+/**
+ * This class is a client thread that send IP and MAC addresses of the client
+ * to the group owner once it is connected to a network.
+ */
 public class ClientSocketHandler extends Thread {
 
-    private static final String TAG = "ClientSocket";
-    private Handler handler;
-    private ChatManager chat;
     private InetAddress mAddress;
 
-    public ClientSocketHandler(Handler handler, InetAddress groupOwnerAddress) {
-        this.handler = handler;
+    public ClientSocketHandler(InetAddress groupOwnerAddress) {
         this.mAddress = groupOwnerAddress;
     }
 
     /*---------Overridden Methods------------*/
     @Override
     public void run() {
-
-        Socket socket = new Socket();
-        try {
-
             sendMyMAC();
-            socket.bind(null);
-            socket.connect(new InetSocketAddress(mAddress.getHostAddress(),
-                    Globals.SERVER_PORT), 5000);
-            chat = new ChatManager(socket, handler);
-
-            new Thread(chat).start();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            try {
-                socket.close();
-            } catch (IOException e1) {
-                e1.printStackTrace();
-            }
-            return;
-        }
     }
 
     /**

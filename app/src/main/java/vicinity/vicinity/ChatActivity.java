@@ -1,43 +1,45 @@
 package vicinity.vicinity;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.Cursor;
 import android.database.DataSetObserver;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.drawable.ColorDrawable;
+import android.media.ExifInterface;
 import android.net.Uri;
-import android.os.Handler;
-import android.os.Message;
+import android.os.Bundle;
 import android.provider.MediaStore;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarActivity;
-import android.os.Bundle;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.AbsListView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
-import java.math.BigInteger;
+import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 
-import vicinity.ConnectionManager.ChatManager;
+import vicinity.ConnectionManager.ChatClient;
+import vicinity.ConnectionManager.ServiceRequest;
 import vicinity.Controller.MainController;
 import vicinity.Controller.VicinityNotifications;
 import vicinity.model.Globals;
+import vicinity.model.Neighbor;
 import vicinity.model.VicinityMessage;
 
 
@@ -48,16 +50,23 @@ public class ChatActivity extends ActionBarActivity {
     private EditText chatText;
     private Button send;
     private Button sendImgButton;
-    private Boolean position;
     private VicinityMessage vicinityMessage;
-    private static ChatManager chatManager;
     private static ChatAdapter adapter;
     public static Context ctx;
-    private static MainController controller;
-    private int msgId;
-    ArrayList<VicinityMessage> history;
+    private MainController controller;
+    private int chatID;
     private static final int SELECT_PICTURE_ACTIVITY_REQUEST_CODE = 0;
     private VicinityMessage imgMsg;
+    private static String TAG = "ChatActivity";
+
+    private static VicinityMessage message;
+    private BroadcastReceiver newMessage;
+    private ChatClient chatClient;
+    public static String friendsIp;
+    private Neighbor friendChat;
+    private Thread chatThread;
+    private boolean gettingImage = false;
+
 
 
 
@@ -74,7 +83,6 @@ public class ChatActivity extends ActionBarActivity {
                 ActionBar.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER);
         TextView textviewTitle = (TextView) viewActionBar.findViewById(R.id.actionbar_textview);
-        textviewTitle.setText("Amal");
         abar.setCustomView(viewActionBar, params);
         abar.setDisplayShowCustomEnabled(true);
         abar.setDisplayShowTitleEnabled(false);
@@ -90,34 +98,66 @@ public class ChatActivity extends ActionBarActivity {
         sendImgButton = (Button) findViewById(R.id.sendImage);
         controller = new MainController(ctx);
 
+
+        ArrayList<VicinityMessage> vicinityMessages = controller.viewAllMessages();
+
+
         imgMsg = new VicinityMessage();
+        imgMsg.setChatId(5);
+        imgMsg.setIsMyMsg(true);
+        imgMsg.setMessageBody("");
+
         try {
-            new VicinityMessage(ctx,  controller.retrieveCurrentUsername(),
-                    5, true);
+            imgMsg.setFriendID(controller.retrieveCurrentUsername());
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
         chatListView.setAdapter(adapter);
         chatListView.setTranscriptMode(AbsListView.TRANSCRIPT_MODE_ALWAYS_SCROLL);
 
-        if (savedInstanceState == null) {
-            Bundle extras = getIntent().getExtras();
-            if (extras == null) {
-                msgId = 0;
-            } else {
-                msgId = extras.getInt("MSG_ID");
+        try{
+            savedInstanceState = getIntent().getExtras();
+            if(savedInstanceState.getSerializable("FRIEND") instanceof Neighbor)
+            {
+                friendChat = (Neighbor) savedInstanceState.getSerializable("FRIEND");
+                chatClient = new ChatClient(friendChat.getIpAddress().getHostAddress());
+                friendsIp = friendChat.getIpAddress().getHostAddress();
+                textviewTitle.setText(friendChat.getInstanceName());
             }
-        } else {
-            msgId = (int) savedInstanceState.getSerializable("MSG_ID");
+            else if(savedInstanceState.getSerializable("MSG") instanceof VicinityMessage){
+                message = (VicinityMessage) savedInstanceState.getSerializable("MSG");
+                chatClient = new ChatClient(message.getFrom());
+                textviewTitle.setText(message.getFriendID());
+                friendsIp = message.getFrom();
+
+            }
+
+
+        }
+        catch (NullPointerException e){
+            e.printStackTrace();
         }
 
-        Log.i(TAG, msgId+"");
+        getHistory();
+        chatThread = new Thread(chatClient);
+        chatThread.start();
 
-        MessagesSectionFragment m = new MessagesSectionFragment();
-        history = m.getMsgs();
-//        Log.i(TAG, history.get(0).getMessageBody());
 
-        //getHistory();
+/*
+        if(!(NeighborSectionFragment.chatClient == null)){
+            Log.i(TAG, "Chat client from neighbor fragment");
+        }
+        else if(!chatThread.isAlive()){
+            Log.i(TAG, "Chat client from chat activity");
+        }
+*/
+
+        //chatThread = new Thread(chatClient);
+            //chatThread.start();
+
+        //controller.addClientThread(chatClient);
+
 
         chatListView.getAdapter().registerDataSetObserver(new DataSetObserver() {
             @Override
@@ -131,107 +171,78 @@ public class ChatActivity extends ActionBarActivity {
         send.setOnClickListener(
                 new Button.OnClickListener() {
                     public void onClick(View v) {
-
-                        Log.i(TAG,"ChatManager= "+chatManager);
-
-                        if (chatManager != null) {
+                        try {
+                            Log.i(TAG, "onClick ");
 
                             //Message
+                            vicinityMessage = new VicinityMessage(ctx, controller.retrieveCurrentUsername(),
+                                    5, true, chatText.getText().toString());
 
-                            try {
-                                vicinityMessage = new VicinityMessage(ctx,  controller.retrieveCurrentUsername(),
-                                        5, true, chatText.getText().toString());
-                            } catch (SQLException e) {
-                                e.printStackTrace();
-                            }
-
-
+                            vicinityMessage.setFrom(friendsIp);
                             //Display Message to user
                             pushMessage(vicinityMessage);
 
-                            String jsonstring = controller.shiftInsertMessage(vicinityMessage);
+                            /*if(!(NeighborSectionFragment.chatClient == null)){
+                                NeighborSectionFragment.chatClient.write(vicinityMessage);
+                                Log.i(TAG, "Writing vicinityMessage successful");
+                            }
+                            else {
+                                Log.i(TAG, "Writing vicinityMessage successful");
+                            }*/
 
-                            chatManager.write(jsonstring.getBytes());
-                            Log.i(TAG,"Writing vicinityMessage successful");
+                            chatClient.write(vicinityMessage);
 
 
                             //To add vicinityMessage to db
-                            try {
-                                boolean added = controller.addMessage(vicinityMessage);
-                                if(added)
+                            boolean added = controller.addMessage(vicinityMessage);
+                            if (added)
                                 Log.i(TAG, "Message added");
-                            } catch (SQLException e) {
-                                e.printStackTrace();
-                            }
 
-                            //Clear EditText
-                            chatText.setText(null);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
                         }
+
+                        //Clear EditText
+                        chatText.setText(null);
                     }
+
                 }
         );
 
         sendImgButton.setOnClickListener(
                 new Button.OnClickListener() {
                     public void onClick(View v) {
-
-
+                        gettingImage = true;
                         selectPicture();
-
                     }
                 }
         );
 
+        newMessage = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                try {
+                    final Bundle bundle = intent.getExtras();
 
-    }
+                    Log.i(TAG,"onReceive");
+                    VicinityMessage vMessage = (VicinityMessage) bundle.getSerializable("NEW_MESSAGE");
+                    Log.i(TAG,"Received new message: "+vMessage.getMessageBody());
+                    friendsIp = vMessage.getFrom();
+                    pushMessage(vMessage);
+                    intent.removeExtra("NEW_MESSAGE");
 
-
-    public static final String TAG = "ChatActivity";
-    private static VicinityMessage message;
-
-    public static Handler handler = new Handler(){
-        /**
-         *
-         * @param msg
-         * @return
-         */
-        @Override
-        public void handleMessage(Message msg) {
-            Log.i(TAG,"handleMessage");
-            switch (msg.what) {
-                case Globals.MESSAGE_READ:
-                    byte[] readBuf = (byte[]) msg.obj;
-                    // construct a string from the valid bytes in the buffer
-                    String readMessage = new String(readBuf, 0, msg.arg1);
-
-                    Log.d(TAG, readMessage);
-
-                    message = VicinityMessage.parseMessageRow(readMessage);
-
-                    message.setIsMyMsg(false);
-
-                    if(Globals.Notification)
-                    VicinityNotifications.newMessageNotification(message);
-                    Log.i(TAG,"message "+message.getMessageBody());
-                    pushMessage(message);
-                    try {
-                        controller.addMessage(message);
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-
-                    break;
-
-                case Globals.MY_HANDLE:
-                    Object obj = msg.obj;
-                    chatManager = ((ChatManager) obj);
-                    Log.i(TAG," "+obj.toString());
+                }
+                catch (NullPointerException e){
+                    e.printStackTrace();
+                }
 
             }
-        }
-    };
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("MESSAGE");
+        LocalBroadcastManager.getInstance(ctx).registerReceiver((newMessage), filter);
 
-
+    }
 
     /**
      * Sends an object VicinityMessage to the Message adapter
@@ -243,47 +254,19 @@ public class ChatActivity extends ActionBarActivity {
     }
 
 
-
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_chat, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
-
-
     private void getHistory() {
         try {
-            Log.i(TAG, msgId + "");
+            Log.i(TAG, "History: "+ friendsIp);
 
-
-            ArrayList<VicinityMessage> m = new ArrayList<VicinityMessage>();
-            m = controller.getChatMessages(msgId);
+            ArrayList<VicinityMessage> m = controller.getChatMessages(friendsIp);
 
             for (int i = 0; i < m.size(); i++) {
                 pushMessage(m.get(i));
-                Log.i(TAG, m.get(i).getMessageBody());
-
+                Log.i(TAG, "History: "+ m.get(i).getMessageBody());
             }
+
         } catch (IndexOutOfBoundsException e) {
             e.printStackTrace();
-
         }
     }
 
@@ -295,14 +278,27 @@ public class ChatActivity extends ActionBarActivity {
         switch (requestCode) {
             case SELECT_PICTURE_ACTIVITY_REQUEST_CODE:
                 if (resultCode == RESULT_OK) {
+
                     Uri selectedImage = imageReturnedIntent.getData();
                     String[] filePathColumn = {MediaStore.Images.Media.DATA};
                     Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
                     if (cursor.moveToFirst()) {
                         int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
                         String filePath = cursor.getString(columnIndex);
-                        Bitmap bitmap = BitmapFactory.decodeFile(filePath);
-                        sendPhotoObj(bitmap);
+                        BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+                        bmOptions.inJustDecodeBounds = true;
+                        BitmapFactory.decodeFile(filePath, bmOptions);
+                        int photoW = bmOptions.outWidth;
+                        int photoH = bmOptions.outHeight;
+
+                        Bitmap rotatedBitmap = decodeFile(new File(filePath),
+                                photoW, photoH, getImageOrientation(filePath));
+
+                        try {
+                            sendPhotoObj(rotatedBitmap);
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
                     }
                     cursor.close();
                 }
@@ -310,27 +306,130 @@ public class ChatActivity extends ActionBarActivity {
         }
     }
 
-    public void sendPhotoObj(Bitmap b)  {
+    public static int getImageOrientation(String imagePath) {
+        int rotate = 0;
+        try {
+
+            File imageFile = new File(imagePath);
+            ExifInterface exif = new ExifInterface(imageFile.getAbsolutePath());
+            int orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL);
+
+            switch (orientation) {
+                case ExifInterface.ORIENTATION_ROTATE_270:
+                    rotate = 270;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_180:
+                    rotate = 180;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_90:
+                    rotate = 90;
+                    break;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return rotate;
+    }
+
+    public static Bitmap decodeFile(File f, double REQUIRED_WIDTH,
+                                    double REQUIRED_HEIGHT, int rotation) {
+        try {
+            if (REQUIRED_WIDTH == 0 || REQUIRED_HEIGHT == 0) {
+                return BitmapFactory.decodeFile(f.getAbsolutePath());
+            } else {
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+
+                o.inSampleSize = calculateInSampleSize(o, REQUIRED_WIDTH,
+                        REQUIRED_HEIGHT);
+
+                o.inJustDecodeBounds = false;
+                o.inPurgeable = true;
+                Bitmap b = BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+                if (rotation != 0)
+                    b = rotate(b, rotation);
+                if (b.getWidth() > REQUIRED_WIDTH
+                        || b.getHeight() > REQUIRED_HEIGHT) {
+                    double ratio = Math.max((double) b.getWidth(),
+                            (double) b.getHeight())
+                            / (double) Math
+                            .min(REQUIRED_WIDTH, REQUIRED_HEIGHT);
+
+                    return Bitmap.createScaledBitmap(b,
+                            (int) (b.getWidth() / ratio),
+                            (int) (b.getHeight() / ratio), true);
+                } else
+                    return b;
+            }
+
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+
+    public static int calculateInSampleSize(BitmapFactory.Options options,
+                                            double reqWidth, double reqHeight) {
+        // Raw height and width of image
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+
+            // Calculate the largest inSampleSize value that is a power of 2 and
+            // keeps both
+            // height and width larger than the requested height and width.
+            while ((height / inSampleSize) > reqHeight
+                    || (width / inSampleSize) > reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+        inSampleSize = Math.max(1, inSampleSize / 2);
+        return inSampleSize;
+    }
+
+    public static Bitmap rotate(Bitmap b, int degrees) {
+        if (degrees != 0 && b != null) {
+            Matrix m = new Matrix();
+            m.setRotate(degrees, (float) b.getWidth() / 2,
+                    (float) b.getHeight() / 2);
+            try {
+                Bitmap b2 = Bitmap.createBitmap(b, 0, 0, b.getWidth(),
+                        b.getHeight(), m, true);
+                if (b != b2) {
+                    b.recycle();
+                    b = b2;
+                }
+            } catch (OutOfMemoryError ex) {
+                // We have no memory to rotate. Return the original bitmap.
+            }
+        }
+        return b;
+    }
+
+    public void sendPhotoObj(Bitmap b) throws SQLException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Bitmap resized = Bitmap.createScaledBitmap(b,(int)(b.getWidth()*0.3), (int)(b.getHeight()*0.3), true);
-        resized.compress(Bitmap.CompressFormat.JPEG, 1, baos);
+        resized.compress(Bitmap.CompressFormat.JPEG, 100, baos);
 
         Log.i(TAG, resized.getHeight()* resized.getWidth()+"");
         byte[] imageBytes = baos.toByteArray();
         String encodedImage = Base64.encodeToString(imageBytes, Base64.DEFAULT);
 
         imgMsg.setImageString(encodedImage);
+        imgMsg.setFrom(friendsIp);
+        Log.i(TAG, "Chat img ip: " +friendsIp);
 
         pushMessage(imgMsg);
-
-        String jsonstring = controller.shiftInsertMessage(imgMsg);
-        chatManager.write(jsonstring.getBytes());
-        //chatText.setText("Photo is attached, click send");
+        chatClient.write(imgMsg);
+        gettingImage = false;
 
 
     }
-
-
 
 
     private void selectPicture() {
@@ -339,4 +438,26 @@ public class ChatActivity extends ActionBarActivity {
         startActivityForResult(intent, SELECT_PICTURE_ACTIVITY_REQUEST_CODE);
     }
 
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Globals.chatActive = true;
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Globals.chatActive = false;
+        if(!gettingImage){
+            finish();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        //chatThread.stop();
+
+    }
 }

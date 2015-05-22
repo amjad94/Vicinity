@@ -1,58 +1,57 @@
 package vicinity.ConnectionManager;
 
+import android.content.ComponentName;
+import android.content.Intent;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import vicinity.Controller.MainController;
+import vicinity.Controller.VicinityNotifications;
 import vicinity.model.Globals;
 import vicinity.model.VicinityMessage;
+import vicinity.vicinity.ChatActivity;
 
 
-public class ChatServer extends Thread{
+public class ChatServer implements Runnable{
 
-    final static String TAG ="ChatServer";
-    ServerSocket chatSocket;
-    Socket clientSocket;
+    private final static String TAG ="ChatServer";
 
-
-    public ChatServer() throws IOException{
-
-            Log.i(TAG,"Chat thread has started...");
-            chatSocket = new ServerSocket(Globals.CHAT_PORT);
-
-
-    }
+    private static ChatServer server;
+    private ServerSocket serverSocket;
+    private ExecutorService executorService = Executors.newFixedThreadPool(20);
 
     @Override
     public void run() {
-        while (true) {
-            try {
-                clientSocket = chatSocket.accept();
-                InetAddress chatIP = clientSocket.getInetAddress();
-                Log.i(TAG,"Friend : "+chatIP+" started a chat");
-                ObjectInputStream inputStream =  new ObjectInputStream(clientSocket.getInputStream());
-                VicinityMessage msg = (VicinityMessage)inputStream.readObject();
-                Log.i(TAG,"Received a msg from: "+msg.getFriendID());
+        try {
+            System.out.println("Starting Server");
+            serverSocket = new ServerSocket(Globals.CHAT_PORT);
 
-            } catch (IOException e) {
-                e.printStackTrace();
-                break;
+            while(true) {
+                System.out.println("Waiting for request");
+                try {
+                    Socket s = serverSocket.accept();
+                    System.out.println("Processing request");
+                    executorService.submit(new ServiceRequest(s));
+                } catch(IOException ioe) {
+                    System.out.println("Error accepting connection");
+                    ioe.printStackTrace();
+                }
             }
-            catch (ClassNotFoundException e){
-                e.printStackTrace();
-                break;
-            }
+        }catch(IOException e) {
+            System.out.println("Error starting Server on "+Globals.CHAT_PORT);
+            e.printStackTrace();
         }
     }
-
-
-
 
 }

@@ -17,24 +17,13 @@ public class Globals {
     public static final String SERVICE_NAME = "_VicinityApp";
     public static final String SERVICE_REG_TYPE = "_presence._tcp";
     /*-----Port numbers---------*/
-    public static final int SERVER_PORT = 4142;
-    public static final int ADDRESSES_PORT = 4143;
-    public static final int REQUEST_PORT= 4144; //for friend requests among peers
-    public static final int CHAT_PORT= 4145;
-
-    public static final int MESSAGE_READ = 0x400 + 1;
-    public static final int MY_HANDLE = 0x400 + 2;
-    public static final int MSG_SIZE = 50;    // the lastest 50 messages
-    public static final String MSG_SENDER = "sender";
-    public static final String MSG_CONTENT = "body";
-    public static final String MSG_ID = "id";
-    public static final String MSG_MINE = "isMyMsg";
-    public static final String MSG_IMG = "img";
+    public static final int SERVER_PORT = 41420;
+    public static final int ADDRESSES_PORT = 41430;
+    public static final int REQUEST_PORT= 41440; //for friend requests among peers
+    public static final int CHAT_PORT= 41450;
 
 
 
-    /*-----Request protocol code messages----*/
-    public static boolean isRequestAccepted=false;
 
 
     /**
@@ -51,10 +40,14 @@ public class Globals {
     //Current device's P2P MAC address
     public static String MY_MAC = null;
     //Current device's local IP
-    public static InetAddress MY_IP=null;
+    public static InetAddress MY_IP = null;
+    //To check if ChatActivty is active
+    public static boolean chatActive = false;
 
-    public static int KRYO_TCP_PORT = 54555;
-    public static int KRYO_UDP_PORT = 54777;
+    public static boolean stopServer = true;
+
+    public static boolean isNewUser=false;
+
 
 
 }

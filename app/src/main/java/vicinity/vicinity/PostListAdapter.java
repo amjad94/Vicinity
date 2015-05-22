@@ -11,13 +11,11 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import java.io.ByteArrayOutputStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
 
 import vicinity.Controller.MainController;
 import vicinity.model.Post;
-import vicinity.vicinity.R;
 
 /**
  * An adapter that takes a list of posts and displays it in a ListView
@@ -42,22 +40,7 @@ public class PostListAdapter  extends BaseAdapter {
 
 
     }
-    /*
-    public void updatePosts(ArrayList<Post> p) {
-        if(p.size()!=0) {
-            posts.clear();
-            for (int i = 0; i < p.size(); i++) {
-                posts.add(p.get(i));
 
-                try {
-                    controller.addPost(p.get(i));
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-
-            }
-        }
-    }*/
 
     public void addPost(Post p){
         posts.add(p);
@@ -105,18 +88,29 @@ public class PostListAdapter  extends BaseAdapter {
             holder = (ViewHolder) convertView.getTag();
         }
 
+        holder.txtPost.setVisibility(View.GONE);
+        holder.imageView.setVisibility(View.GONE);
+
         holder.txtName.setText(posts.get(position).getPostedBy());
+        holder.txtComments.setText("0 comments");
+        holder.txtDate.setText(posts.get(position).getPostedAt());
 
+        if(!posts.get(position).getPostBody().equals("")){
+            holder.txtPost.setVisibility(View.VISIBLE);
             holder.txtPost.setText(posts.get(position).getPostBody());
-            holder.txtComments.setText("0 comments");
-            holder.txtDate.setText(posts.get(position).getPostedAt());
+        }
 
-        if(!posts.get(position).getBitmap().equals("")){
-            String imageBitmap = posts.get(position).getBitmap();
-            byte[] decodedString = Base64.decode(imageBitmap, Base64.DEFAULT);
-            Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
-            holder.imageView.setImageBitmap(decodedByte);
+        try {
+            if(!posts.get(position).getBitmap().equals("")){
+                holder.imageView.setVisibility(View.VISIBLE);
+                String imageBitmap = posts.get(position).getBitmap();
+                byte[] decodedString = Base64.decode(imageBitmap, Base64.DEFAULT);
+                Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                holder.imageView.setImageBitmap(decodedByte);
 
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
 
@@ -127,6 +121,12 @@ public class PostListAdapter  extends BaseAdapter {
         TextView txtName, txtPost, txtComments, txtDate;
         ImageView imageView;
     }
+
+    public  static void clearPosts(){
+        posts.clear();
+        TimelineSectionFragment.clearPosts();
+    }
+
 
 
 }

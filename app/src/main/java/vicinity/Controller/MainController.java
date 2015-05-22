@@ -1,7 +1,7 @@
 package vicinity.Controller;
 
 
-        import android.content.ContentValues;
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -9,23 +9,23 @@ import android.database.sqlite.SQLiteException;
 import android.util.Log;
 import android.widget.Toast;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.IOException;
+import java.net.InetAddress;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Iterator;
 
+import vicinity.ConnectionManager.ChatClient;
 import vicinity.ConnectionManager.ConnectAndDiscoverService;
 import vicinity.ConnectionManager.UDPpacketListner;
 import vicinity.model.Comment;
 import vicinity.model.CurrentUser;
 import vicinity.model.DBHandler;
-import vicinity.model.JSONUtils;
 import vicinity.model.Neighbor;
 import vicinity.model.Post;
 import vicinity.model.VicinityMessage;
 import vicinity.vicinity.NeighborListAdapter;
+import vicinity.vicinity.TabsActivity;
 
 /**
  * This is the main class that integrates different components of the system
@@ -37,15 +37,15 @@ public class MainController {
     private SQLiteDatabase database;
     private DBHandler dbH;
     private Context context;
-    private ArrayList<Neighbor> friendsList;
     private ArrayList<Post> postList;
     private ArrayList<VicinityMessage> allMessages;
     private ArrayList<VicinityMessage> allChatMessages;
-    private ArrayList<Neighbor> mutedUsers;
     public String query;
     public Cursor cursor;
     private ArrayList<Comment> commentsList;
-    JSONArray mMessageArray = new JSONArray();		// limit to the latest 50 messages
+    private ArrayList<ChatClient> clientThreads;
+
+    public static ArrayList<Neighbor> mutedNeighbors = new ArrayList<>();
 
 
 
@@ -61,6 +61,8 @@ public class MainController {
         dbH=new DBHandler(context);
         this.context=context;
         allMessages = new ArrayList<VicinityMessage>();
+        clientThreads = new ArrayList<>();
+
         try{
             dbH.createDataBase();
             dbH.openDataBase();}
@@ -89,7 +91,7 @@ public class MainController {
         CurrentUser newUser=new CurrentUser(context,username);
         try{
 
-            database = dbH.getReadableDatabase();
+            database = dbH.getWritableDatabase();
             dbH.openDataBase();
             database.execSQL("INSERT INTO CurrentUser (Username) VALUES ('" + newUser.getUsername() + "');");
             isCreated=true;
@@ -113,9 +115,7 @@ public class MainController {
     public String retrieveCurrentUsername()throws SQLException{
         String username2=null;
 
-        //try {
-        //dbH.openDataBase();
-        database = dbH.getWritableDatabase();
+        database = dbH.getReadableDatabase();
         query="SELECT Username FROM CurrentUser";
         cursor = database.rawQuery(query,null);
 
@@ -124,11 +124,7 @@ public class MainController {
         cursor.close();
         dbH.close();
         return username2;
-       /* }
-        catch (SQLException e){
-            Log.i(TAG,"SQLException IN retrieveCurrentUser > currentUser");
-        }*/
-        //return username2;
+
     }
 
     /**
@@ -149,21 +145,45 @@ public class MainController {
     /*--------------------------------------------------------------------------------------*/
 
 
+
     /*--------------------------Neighbors Methods----------------------------------------------*/
 
     /**
      * This method mutes user by searching for a peer with the given
      * device address in the neighbours list and deleting the user
      * It also deletes posts & comments by this specific user as well
-     * @param user the to-be muted user
+     * @param neighbor the to-be muted user
      * @return isMuted true if the user was muted, false otherwise
      */
-    public boolean muteUser(Neighbor user){
+    public static boolean muteNeighbor(Neighbor neighbor) throws NullPointerException{
         boolean isMuted = false;
-        if(user.getIpAddress()!=null && UDPpacketListner.doesAddressExist(user.getDeviceAddress())){
+        if(!isUserMuted(neighbor)) {
+            if (UDPpacketListner.doesAddressExist(neighbor.getDeviceAddress())) {
+                //Get the neighbor's IP
+                neighbor.setIpAddress(UDPpacketListner.getPeerAddress(neighbor.getDeviceAddress()));
 
+                isMuted = mutedNeighbors.add(neighbor);
+                Log.i("mute", neighbor.getInstanceName() + " is muted? " + isMuted);
+                if(isMuted)
+                    Toast.makeText(TabsActivity.ctx, neighbor.getInstanceName()+" has been muted", Toast.LENGTH_LONG).show();
+
+            }
         }
         return isMuted;
+    }
+
+    /**
+     * Removes a given neighbor from the muted neighbors list
+     * @param neighbor a Neighbor object to be removed from the list
+     * @return a boolean true if the operation was successful,
+     *          false otherwise.
+     */
+    public static boolean unmuteNeighbor(Neighbor neighbor){
+        if(isUserMuted(neighbor))
+        {
+            Toast.makeText(TabsActivity.ctx, neighbor.getInstanceName()+" has been unmuted", Toast.LENGTH_LONG).show();
+            return mutedNeighbors.remove(neighbor);}
+        return false;
     }
 
     /**
@@ -173,17 +193,40 @@ public class MainController {
      * @return isMuted a boolean that is true if user exists in muted users list
      * false otherwise
      */
-    public boolean isUserMuted(Neighbor user){
-        boolean isMuted = false;
+    public static boolean isUserMuted(Neighbor user){
+        Iterator<Neighbor> it = mutedNeighbors.iterator();
+        while (it.hasNext()) {
+            Neighbor peer = it.next();
+            if(peer.getDeviceAddress().equals(user.getDeviceAddress())) {
+                Log.i(TAG,"User is muted");
+                return true;
+            }
+        }
+        Log.i(TAG,"User is NOT muted");
+        return false;
+    }
 
-
-        return isMuted;
+    /**
+     * Checks if the IP belongs to a muted neighbor
+     * @param IP InetAddress IP to be checked
+     * @return boolean that is true if the IP belongs
+     *          to a muted user, false otherwise.
+     */
+    public static boolean isThisIPMuted(InetAddress IP){
+        Iterator<Neighbor> it = mutedNeighbors.iterator();
+        while (it.hasNext()) {
+            Neighbor peer = it.next();
+            if(peer.getIpAddress().equals(IP))
+                return true;
+        }
+        return false;
     }
 
 
 
 
     /*--------------------------------------------------------------------------------------*/
+
 
 
 
@@ -216,8 +259,9 @@ public class MainController {
     /**
      *
      */
+    public static boolean isDeleted = false;
     public void alertUserOfRequestReply(boolean reply, Neighbor neighbor) throws SQLException{
-        CharSequence text;
+        CharSequence text=neighbor.getInstanceName()+" has been removed from your friends";
         int duration = Toast.LENGTH_LONG;
         if(reply){
             addFriend(neighbor);
@@ -225,7 +269,8 @@ public class MainController {
             text = neighbor.getInstanceName()+" is now your friend!";
         }
         else{
-            text = neighbor.getInstanceName()+" has rejected your request...";
+            if(!isDeleted)
+                text = neighbor.getInstanceName()+" has rejected your request...";
         }
         Toast toast = Toast.makeText(ConnectAndDiscoverService.ctx,text,duration);
         toast.show();
@@ -294,7 +339,8 @@ public class MainController {
             cursor.moveToFirst();
             if(cursor.getCount()==0)
                 isFriend=false;
-            //cursor.close();
+            cursor.close();
+            dbH.close();
         }
         catch(SQLException e){
             e.printStackTrace();
@@ -334,7 +380,8 @@ public class MainController {
                     post.setPostedBy(c.getString(c.getColumnIndex("postedBy")));
                     post.setPostedAt(c.getString(c.getColumnIndex("postedAt")));
                     post.setPostID(Integer.valueOf(c.getString(c.getColumnIndex("postID"))));
-                    //contact.setPicture(c.getBlob(3));
+                    post.setBitmap(c.getString(c.getColumnIndex("image")));
+
                     postList.add(post);
                 } while (c.moveToNext());
             }
@@ -372,6 +419,7 @@ public class MainController {
             values.put("postedBy", post.getPostedBy());
             values.put("postedAt", post.getPostedAt());
             values.put("postID", post.getPostID());
+            values.put("image" , post.getBitmap());
 
             isAdded=database.insert("Post", null, values)>0;
 
@@ -407,7 +455,8 @@ public class MainController {
                 post.setPostID(c.getColumnIndex("postID"));
                 post.setPostBody(c.getString(c.getColumnIndex("postBody")));
                 post.setPostedBy(c.getString(c.getColumnIndex("postedBy")));
-                //contact.setPicture(c.getBlob(3));
+                post.setBitmap(c.getString(c.getColumnIndex("image")));
+
             }
             else
             {
@@ -425,17 +474,6 @@ public class MainController {
     } //END getPost
 
 
-    public Post getPost2(int id){
-        Post p = new Post();
-        ArrayList<Post> allPosts = viewAllPosts();
-
-
-        for (int i=0; i<allPosts.size(); i++){
-            if(allPosts.get(i).getPostID()==id)
-                p =  allPosts.get(i);
-        }
-        return p;
-    }
 
     /**
      * Deletes all records in Post table in database
@@ -479,6 +517,8 @@ public class MainController {
                     comment.setCommentBody(c.getString(c.getColumnIndex("commentBody")));
                     comment.setCommentedBy(c.getString(c.getColumnIndex("commentedBy")));
                     comment.setCommentID(c.getColumnIndex("commentID"));
+                    comment.setPostID(c.getColumnIndex("postID"));
+
 
                     // Adding comment to commentsList
                     commentsList.add(comment);
@@ -529,13 +569,12 @@ public class MainController {
         boolean areDeleted;
         database = dbH.getReadableDatabase();
         dbH.openDataBase();
-        areDeleted= database.delete("Post", null, null)>0;
+        areDeleted= database.delete("Comment", null, null)>0;
 
         dbH.close();
         return areDeleted;
     }
 
-    /*--------------------------------------------------------------------------------------*/
 
 
     /*------------------------------Chat Methods--------------------------------------------*/
@@ -544,7 +583,7 @@ public class MainController {
      * Fetches user's Chats from the database
      * @return allMessages
      */
-    public ArrayList<VicinityMessage> viewAllChatMessages(int cId)
+    public ArrayList<VicinityMessage> viewAllChatMessages(String ip)
 
     {
 
@@ -552,7 +591,7 @@ public class MainController {
         {
             database=dbH.getReadableDatabase();
             dbH.openDataBase();
-            String query="SELECT * FROM Message WHERE chatId ="+cId;
+            String query="SELECT * FROM Message WHERE fromIP="+"\""+ip+"\";";
             Cursor c = database.rawQuery(query,null);
 
             VicinityMessage msg = null;
@@ -564,6 +603,10 @@ public class MainController {
                     msg.setMessageBody(c.getString(3));
                     msg.setFriendID(c.getString(2));
                     msg.setChatId(c.getInt(c.getColumnIndex("chatId")));
+                    msg.setFrom(c.getString(c.getColumnIndex("fromIP")));
+                    msg.setImageString(c.getString(c.getColumnIndex("image")));
+
+
 
                     msg.setDate(c.getString(1));
                     //contact.setPicture(c.getBlob(3));
@@ -609,7 +652,10 @@ public class MainController {
                     msg = new VicinityMessage();
                     msg.setMessageBody(c.getString(3));
                     msg.setFriendID(c.getString(2));
+                    msg.setIsMyMsg(c.getInt(c.getColumnIndex("isMyMsg"))>0);
                     msg.setChatId(c.getInt(c.getColumnIndex("chatId")));
+                    msg.setFrom(c.getString(c.getColumnIndex("fromIP")));
+                    msg.setImageString(c.getString(c.getColumnIndex("image")));
 
                     msg.setDate(c.getString(1));
                     //contact.setPicture(c.getBlob(3));
@@ -627,36 +673,36 @@ public class MainController {
             e.printStackTrace();
         }
 
-
         return allMessages;
     }
 
 
     /**
      * Fetches all the chat IDs from the db
-     * @return chatIds int array
+     * @return chatIds InetAddress array
      */
-    public int[] viewChatIds()
+    public ArrayList<String> viewChatIps()
 
     {
-        int[] chatIds = new int[30];
+        ArrayList<String> chatIps = new ArrayList<String>();
 
         try
         {
             database=dbH.getReadableDatabase();
             dbH.openDataBase();
-            String query="SELECT DISTINCT chatId FROM Message";
+            String query="SELECT DISTINCT fromIP FROM Message";
             Cursor c = database.rawQuery(query,null);
             int count = 0;
             if (c.moveToFirst()) {
 
                 do {
 
-                    chatIds[count++] = c.getInt(c.getColumnIndex("chatId"));
+                    chatIps.add(c.getString(c.getColumnIndex("fromIP")));
+                    Log.i(TAG, chatIps.get(count));
 
                 } while (c.moveToNext());
             }else{
-                Log.i(TAG, "There are no chat ids in the DB.");
+                Log.i(TAG, "There are no IPs in the DB.");
             }
             dbH.close();
         }
@@ -665,9 +711,9 @@ public class MainController {
             e.printStackTrace();
         }
 
-        Log.i(TAG, "Successfully returned ids");
+        Log.i(TAG, "Successfully returned IPs");
 
-        return chatIds;
+        return chatIps;
     }
 
 
@@ -732,6 +778,8 @@ public class MainController {
             values.put("chatId", message.getChatId());
             values.put("sentBy", message.getFriendID());
             values.put("msgTimestamp", message.getDate());
+            values.put("fromIP", message.getFrom().toString());
+            values.put("image" , message.getImageString());
 
 
             isAdded=database.insert("Message", null, values)>0;
@@ -748,19 +796,18 @@ public class MainController {
 
     /**
      * Returns an array of all messages for a chat id.
-     * @param chatId and int that is an id of a chat
+     * @param fromIp an InetAddress that is the id of a chat
      * @return an ArrayLis of VicinityMessages of all the messages for the specified chat id.
      */
-    public ArrayList<VicinityMessage> getChatMessages(int chatId){
+    public ArrayList<VicinityMessage> getChatMessages(String fromIp){
 
         ArrayList<VicinityMessage> chat = new ArrayList<VicinityMessage>();
 
         for(int i=0; i<this.allMessages.size(); i++){
 
-            if(this.allMessages.get(i).getChatId()==chatId){
+            if(this.allMessages.get(i).getFrom().equals(fromIp)){
                 chat.add(allMessages.get(i));
                 Log.i(TAG, allMessages.get(i).getMessageBody());
-                Log.i(TAG, allMessages.get(i).getChatId()+"");
 
             }
         }
@@ -768,16 +815,16 @@ public class MainController {
         return chat;
     }
 
-    public String shiftInsertMessage(VicinityMessage row) {
-        JSONObject jsonobj = VicinityMessage.getAsJSONObject(row);
-        if( jsonobj != null ){
-            mMessageArray.put(jsonobj);
-        }
-        mMessageArray = JSONUtils.truncateJSONArray(mMessageArray, 10);  // truncate the oldest 10.
-        return jsonobj.toString();
-    }
+
     /*--------------------------------------------------------------------------------------*/
 
+    public void addClientThread(ChatClient c){
+        clientThreads.add(c);
+    }
+
+    public ArrayList<ChatClient> getClientThreads(){
+        return clientThreads;
+    }
 
 }
 

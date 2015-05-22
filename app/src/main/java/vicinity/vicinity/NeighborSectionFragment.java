@@ -2,26 +2,26 @@ package vicinity.vicinity;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.Button;
 import android.widget.ListView;
-import android.support.v4.app.Fragment;
-import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
-
 
 import java.util.ArrayList;
 import java.util.Iterator;
 
+import vicinity.ConnectionManager.ChatClient;
 import vicinity.ConnectionManager.ConnectAndDiscoverService;
-import vicinity.model.Neighbor;
 import vicinity.Controller.MainController;
+import vicinity.model.Globals;
+import vicinity.model.Neighbor;
 
 /**
  * Neighbors tab
@@ -38,12 +38,17 @@ public class NeighborSectionFragment extends Fragment {
     private ListView lvf;
     private static NeighborListAdapter neighborListAdapter;
     private static FriendListAdapter friendListAdapter;
+    public static ChatClient chatClient;
 
 
 
     public interface DeviceClickListener {
         public void connectP2p(Neighbor wifiP2pService);
-        public void chatWithFriend(Neighbor neighbor);
+
+    }
+
+    public interface Handling {
+        public Handler getHandler();
 
     }
 
@@ -126,21 +131,44 @@ public class NeighborSectionFragment extends Fragment {
 
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                Log.i(TAG,"Clicked: "+neighborListAdapter.getItem(position).toString()) ;
-                final Neighbor neighbor = (Neighbor) neighborListAdapter.getItem(position);
+                Log.i(TAG,"Clicked: "+neighborListAdapter.getItem(position-1).toString()) ;
+                final Neighbor neighbor = (Neighbor) neighborListAdapter.getItem(position-1);
                 ((DeviceClickListener) ConnectAndDiscoverService.ctx).connectP2p(neighbor);
             }
         });
 
+
+        lvf.setOnItemClickListener(new AdapterView.OnItemClickListener(){
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                Log.i(TAG,"Clicked: "+friendListAdapter.getItem(position-1).toString()) ;
+                final Neighbor friend = (Neighbor) friendListAdapter.getItem(position-1);
+                if(Globals.isConnectedToANetwork){
+                Intent intent = new Intent(ctx, ChatActivity.class);
+                intent.putExtra("FRIEND", friend);
+
+                startActivity(intent);}
+                else{
+                    ((DeviceClickListener) ConnectAndDiscoverService.ctx).connectP2p(friend);
+                }
+
+            }
+        });
 
 
         return rootView;
     }
 
     public static void updateDeletedFriend(Neighbor deletedFriend){
-                friendServices.remove(deletedFriend);
-                listOfServices.add(deletedFriend);
+            Iterator<Neighbor> it = friendServices.iterator();
+            while (it.hasNext()) {
+            Neighbor user = it.next();
+            if (user.getDeviceAddress().equals(deletedFriend.getDeviceAddress())) {
+                it.remove();
                 friendListAdapter.notifyDataSetChanged();
+            }
+        }
+                listOfServices.add(deletedFriend);
                 neighborListAdapter.notifyDataSetChanged();
             }
 
@@ -186,5 +214,7 @@ public class NeighborSectionFragment extends Fragment {
             neighborListAdapter.notifyDataSetChanged();
         }
     }
+
+
 
 }

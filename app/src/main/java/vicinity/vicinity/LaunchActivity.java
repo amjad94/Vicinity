@@ -6,12 +6,15 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.content.Context;
+
 import java.sql.SQLException;
 import java.util.Timer;
 import java.util.TimerTask;
 
 
 import vicinity.Controller.MainController;
+import vicinity.model.DBHandler;
+import vicinity.model.Globals;
 
 /**
  * Launch activity displays the app's logo
@@ -27,8 +30,7 @@ public class LaunchActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_launch);
-        final MainController controller = new MainController(context);
-        /*
+
         DBHandler dbH=new DBHandler(context);
         try{
             dbH.createDataBase();
@@ -38,8 +40,8 @@ public class LaunchActivity extends Activity {
 
         catch (Exception e){
             e.printStackTrace();
-            }
-        */
+        }
+
 
         int secondsDelay = 3;
         Timer timer = new Timer();
@@ -49,11 +51,13 @@ public class LaunchActivity extends Activity {
 
                 try {
                     /**
-                    Checks if user is already registered
-                    then navigate to the timeline directly,
-                    if not then display NameActivity to register
+                     Checks if user is already registered
+                     then navigate to the timeline directly,
+                     if not then display NameActivity to register
                      */
+                    MainController controller = new MainController(context);
                     if (controller.retrieveCurrentUsername()==null) {
+                        Globals.isNewUser=true;
                         Intent intent = new Intent(context, NameActivity.class);
                         startActivity(intent);
                         finish();
@@ -68,7 +72,7 @@ public class LaunchActivity extends Activity {
                 catch(SQLException e){
                     e.printStackTrace();
                 }
-       }
+            }
 
 
         }, secondsDelay * 2000);
