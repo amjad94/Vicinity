@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -12,12 +11,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ListView;
-import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 
-import vicinity.ConnectionManager.ChatClient;
 import vicinity.ConnectionManager.ConnectAndDiscoverService;
 import vicinity.Controller.MainController;
 import vicinity.model.Globals;
@@ -38,17 +35,11 @@ public class NeighborSectionFragment extends Fragment {
     private ListView lvf;
     private static NeighborListAdapter neighborListAdapter;
     private static FriendListAdapter friendListAdapter;
-    public static ChatClient chatClient;
 
 
 
     public interface DeviceClickListener {
         public void connectP2p(Neighbor wifiP2pService);
-
-    }
-
-    public interface Handling {
-        public Handler getHandler();
 
     }
 
@@ -197,6 +188,7 @@ public class NeighborSectionFragment extends Fragment {
      * @param friend A Neighbor object that contains an online friend
      */
     public static void addToFriendsList(Neighbor friend){
+        if(friendServices!=null)
         if(!friendServices.contains(friend)){
             friendServices.add(friend);
             friendListAdapter.notifyDataSetChanged();
@@ -209,12 +201,11 @@ public class NeighborSectionFragment extends Fragment {
      * @param neighbor A Neighbor object that contains an online peer
      */
     public static void addToNeighborsList (Neighbor neighbor)throws NullPointerException{
+        if(listOfServices!=null)
         if(!listOfServices.contains(neighbor)){
             listOfServices.add(neighbor);
             neighborListAdapter.notifyDataSetChanged();
         }
     }
-
-
 
 }

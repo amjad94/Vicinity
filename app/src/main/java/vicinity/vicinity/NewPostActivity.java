@@ -40,15 +40,14 @@ import vicinity.model.Post;
 /**
  * An Activity to add a new post.
  */
-public class NewPost extends ActionBarActivity {
+public class NewPostActivity extends ActionBarActivity {
 
     private static final String TAG = "NewPost";
     private EditText postTextField ;
-    private Button sendImgButton;
     private MainController mc ;
     private UdpBroadcastManager broadcastManager;
     private static final int SELECT_PICTURE_ACTIVITY_REQUEST_CODE = 0;
-    Post aPost;
+    private Post aPost;
 
 
     @Override
@@ -57,7 +56,7 @@ public class NewPost extends ActionBarActivity {
         setContentView(R.layout.activity_new_post);
 
 
-
+    /*----------Change the style of the ActionBar------------*/
         final ActionBar abar = getSupportActionBar();
         abar.setBackgroundDrawable(new ColorDrawable(Color.parseColor("#01aef0")));//line under the action bar
         View viewActionBar = getLayoutInflater().inflate(R.layout.actionbar_layout, null);
@@ -65,23 +64,23 @@ public class NewPost extends ActionBarActivity {
                 ActionBar.LayoutParams.WRAP_CONTENT,
                 ActionBar.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER);
-
         TextView textviewTitle = (TextView) viewActionBar.findViewById(R.id.actionbar_textview);
-        textviewTitle.setText("New Post");
+        textviewTitle.setText("New Post");//ActionBar title
         abar.setCustomView(viewActionBar, params);
         abar.setDisplayShowCustomEnabled(true);
         abar.setDisplayShowTitleEnabled(false);
-        // I disabled the back button in the action bar cuz it causes an error
         abar.setDisplayHomeAsUpEnabled(false);
         abar.setHomeButtonEnabled(true);
 
-        mc = new MainController(this);
 
+        // Initialization
+        mc = new MainController(this);
         broadcastManager = new UdpBroadcastManager();
         postTextField = (EditText) findViewById(R.id.postTextField);
-        sendImgButton = (Button) findViewById(R.id.sendImageButton);
+        Button sendImgButton = (Button) findViewById(R.id.sendImageButton);
         sendImgButton.setEnabled(true);
         aPost = new Post();
+
         postTextField.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -100,7 +99,7 @@ public class NewPost extends ActionBarActivity {
         }); //END addTextChangedListener
 
 
-        sendImgButton.setOnClickListener(new Button.OnClickListener(){
+        sendImgButton.setOnClickListener(new Button.OnClickListener() {
 
             @Override
             public void onClick(View v) {
@@ -140,7 +139,6 @@ public class NewPost extends ActionBarActivity {
             if(Globals.isConnectedToANetwork){
                 aPost.setPostBody(postText);
                 aPost.setPostedBy(mc.retrieveCurrentUsername());
-                aPost.setPostDate();
                 aPost.setPostID(r.nextInt((1000 - 1) + 1) + 1);
                 broadcastManager.setPost(aPost);
                 broadcastManager.execute();
@@ -150,7 +148,7 @@ public class NewPost extends ActionBarActivity {
             else{
                 CharSequence text = "You are not connected to a network!";
                 int duration = Toast.LENGTH_SHORT;
-                Toast toast = Toast.makeText(NewPost.this, text, duration);
+                Toast toast = Toast.makeText(NewPostActivity.this, text, duration);
                 toast.setGravity(Gravity.CENTER|Gravity.CENTER, 0, 0);
                 toast.show();
             }
@@ -160,7 +158,12 @@ public class NewPost extends ActionBarActivity {
         }
     }
 
-
+    /**
+     * Gets the filepath and bitmap of the selected image from gallery
+     * @param requestCode helps identify the request
+     * @param resultCode to check whether the result status is OK or CANCELLED
+     * @param imageReturnedIntent carries the additional data (image)
+     */
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent imageReturnedIntent) {
@@ -196,6 +199,12 @@ public class NewPost extends ActionBarActivity {
         }
     }
 
+    /**
+     * Changes the rotation of the image in order for
+     * it to be displayed in an imageView correctly
+     * @param imagePath  String of the image path
+     * @return int value of the rotation
+     */
     public static int getImageOrientation(String imagePath) {
         int rotate = 0;
         try {
@@ -301,6 +310,10 @@ public class NewPost extends ActionBarActivity {
         return b;
     }
 
+    /**
+     * Creates the image attribute in aPost object that will be sent
+     * @param b image to be sent bitmap
+     */
 
     public void sendPhotoObj(Bitmap b)  {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -315,6 +328,9 @@ public class NewPost extends ActionBarActivity {
                 Toast.LENGTH_LONG).show();
     }
 
+    /**
+     * Opens the device media gallery and activates the ActivityForResult method
+     */
     private void selectPicture() {
         Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");

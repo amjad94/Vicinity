@@ -44,10 +44,13 @@ public class Globals {
     //To check if ChatActivty is active
     public static boolean chatActive = false;
 
-    public static boolean stopServer = true;
-
     public static boolean isNewUser=false;
 
+    //Server flags
+    public static boolean isGroupOwnerRunning = false;
+    public static boolean isRequestServerRunning=false;
+    public static boolean isChatServerRunning = false;
+    public static boolean stopServer = true;
 
 
 }

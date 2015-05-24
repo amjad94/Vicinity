@@ -6,22 +6,18 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.util.Log;
 
-import vicinity.ConnectionManager.ChatClient;
 import vicinity.ConnectionManager.ConnectAndDiscoverService;
-import vicinity.model.Globals;
 import vicinity.model.VicinityMessage;
 import vicinity.vicinity.ChatActivity;
 import vicinity.vicinity.R;
 
 /**
- * This class handles user notifications
+ * This class displays and handles message notifications.
  */
 public class VicinityNotifications {
 
 
     private static final String TAG = "Notify";
-    public static ChatClient chatClient;
-    public static boolean isRunning = false;
 
     /**
      * Notifies receiver about new messages.
@@ -29,13 +25,27 @@ public class VicinityNotifications {
      */
     public static void newMessageNotification(VicinityMessage newMsg) {
 
+        // Notifies the user of background events
         NotificationManager notificationManager = (NotificationManager) ConnectAndDiscoverService.ctx.getSystemService(ConnectAndDiscoverService.ctx.NOTIFICATION_SERVICE);
+        // Initialize notification instance
         Notification notification = new Notification(R.drawable.vicinity_logo, newMsg.getMessageBody(), System.currentTimeMillis());
+        // Device vibrates when notification is received
         notification.defaults |= Notification.DEFAULT_VIBRATE;
-        CharSequence title = newMsg.getFriendID();//TODO change this to the friend's name
-        CharSequence text = newMsg.getMessageBody();
+        // Title of the notification is the message sender's name
+        CharSequence title = newMsg.getFriendName();
+        CharSequence text;
+        // If the message had a message body
+        if(!newMsg.getMessageBody().equals(""))
+        {
+            // Set the notification text to the message body
+            text = newMsg.getMessageBody();
+        }
+        else
+        {
+            // The message body is null means the received message is a photo
+            text = "Sent a photo";
 
-
+        }
 
         Intent notificationIntent = new Intent(ConnectAndDiscoverService.ctx, ChatActivity.class);
         notificationIntent.putExtra("MSG", newMsg);
